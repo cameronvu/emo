@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emotion Detector</title>
+
+  <style>
+    body {
+      background: #0f0f10;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: "Inter", sans-serif;
+    }
+    video {
+      border-radius: 16px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+      transform: scaleX(-1);
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: scaleX(-1);
+    }
+    #emotion {
+      font-size: 2rem;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Emotion Detector</h1>
+  <video id="video" width="640" height="480" autoplay muted></video>
+  <div id="emotion">Loading...</div>
+
+  <!-- Load face-api.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <script>
+    window.addEventListener("load", async () => {
+      const video = document.getElementById("video");
+      const emotionLabel = document.getElementById("emotion");
+
+      async function startVideo() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          video.srcObject = stream;
+        } catch (err) {
+          console.error("Camera access error:", err);
+          alert("Please allow camera access for emotion detection to work.");
+        }
+      }
+
+      async function loadModels() {
+        emotionLabel.textContent = "Loading models...";
+        const MODEL_URL = "./models/weights"; // Ensure your models are here
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+        ]);
+        emotionLabel.textContent = "Models loaded! Starting camera...";
+        startVideo();
+      }
+
+      video.addEventListener("playing", () => {
+        const canvas = faceapi.createCanvasFromMedia(video);
+        document.body.append(canvas);
+
+        const displaySize = { width: video.width, height: video.height };
+        faceapi.matchDimensions(canvas, displaySize);
+
+        setInterval(async () => {
+          const detections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceExpressions();
+
+          const resized = faceapi.resizeResults(detections, displaySize);
+          canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawDetections(canvas, resized);
+
+          if (detections.length > 0) {
+            const expr = detections[0].expressions;
+            const maxEmotion = Object.keys(expr).reduce((a, b) => expr[a] > expr[b] ? a : b);
+            const emoji = {
+              happy: "😊",
+              sad: "😢",
+              angry: "😠",
+              fearful: "😨",
+              disgusted: "🤢",
+              surprised: "😲",
+              neutral: "😐"
+            }[maxEmotion] || "🙂";
+            emotionLabel.textContent = `${emoji} ${maxEmotion.charAt(0).toUpperCase() + maxEmotion.slice(1)}`;
+          } else {
+            emotionLabel.textContent = "No face detected 😶";
+          }
+        }, 200);
+      });
+
+      // Start everything
+      await loadModels();
+    });
+  </script>
+</body>
+</html>
